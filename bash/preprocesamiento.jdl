@@ -1,0 +1,69 @@
+#!/bin/bash
+#$ -N Preprocesamiento
+#$ -cwd
+#$ -S /bin/bash
+
+# Descargar los archivos FASTQ
+fastq-dump --gzip --split-files SRR12082751
+fastq-dump --gzip --split-files SRR12082752
+fastq-dump --gzip --split-files SRR12082753
+fastq-dump --gzip --split-files SRR12082754
+
+# Visualizar la calidad de los archivos
+fastqc ../SRR12082751_1.fastq.gz
+fastqc ../SRR12082751_2.fastq.gz
+fastqc ../SRR12082752_1.fastq.gz
+fastqc ../SRR12082752_2.fastq.gz
+fastqc ../SRR12082753_1.fastq.gz
+fastqc ../SRR12082753_2.fastq.gz
+fastqc ../SRR12082754_1.fastq.gz
+fastqc ../SRR12082754_2.fastq.gz
+
+# Realizar trimming de los archivos
+trim_galore --paired --fastqc ../SRR12082751_1.fastq.gz ../SRR12082751_2.fastq.gz 
+trim_galore --paired --fastqc ../SRR12082752_1.fastq.gz ../SRR12082752_2.fastq.gz 
+trim_galore --paired --fastqc ../SRR12082753_1.fastq.gz ../SRR12082753_2.fastq.gz 
+trim_galore --paired --fastqc ../SRR12082754_1.fastq.gz ../SRR12082754_2.fastq.gz 
+
+# Visualizar la calidad de los archivos tras el trimming
+fastqc SRR12082751_1_val_1.fastq.gz
+fastqc SRR12082751_2_val_2.fastq.gz
+fastqc SRR12082752_1_val_1.fastq.gz
+fastqc SRR12082752_2_val_2.fastq.gz
+fastqc SRR12082753_1_val_1.fastq.gz
+fastqc SRR12082753_2_val_2.fastq.gz
+fastqc SRR12082754_1_val_1.fastq.gz
+fastqc SRR12082754_2_val_2.fastq.gz
+
+# Descargar archivos del genoma de refencia y anotacion. Indexarlos en la herramienta  hisat 2
+wget ftp://ftp.ensembl.org/pub/release-84/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+gzip -d Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+mv Homo_sapiens.GRCh38.dna.primary_assembly.fa hg38.fa
+
+wget ftp://ftp.ensembl.org/pub/release-84/gtf/homo_sapiens/Homo_sapiens.GRCh38.84.gtf.gz  
+gzip -d Homo_sapiens.GRCh38.84.gtf.gz
+mv Homo_sapiens.GRCh38.84.gtf hg38.gtf
+
+# Aniadir CHR al archivo de anotacion
+ gzip -dc Homo_sapiens.GRCh38.99.chr.gtf.gz | awk '{ if($1 ~ /^#/){ print $0 } else { print "chr"$0 } }' > hg38.gtf
+sed -i -e 's/^chrMT/chrM/' hg38.gtf
+
+# Indexar los archivos en hisat2
+hisat2-build -p 16 hg38.fa hg38
+
+# Alinear los archivos con el genoma de referencia
+hisat2 -p 3 --no-mixed --no-discordant --no-unal -x ../indexes/renamed/hg38 -1 ../trimming/SRR12082751_1_val_1.fq.gz -2 ../trimming/SRR12082751_2_val_2.fq.gz -S SRR12082751_P.sam
+hisat2 -p 3 --no-mixed --no-discordant --no-unal -x ../indexes/renamed/hg38 -1 ../trimming/SRR12082752_1_val_1.fq.gz -2 ../trimming/SRR12082752_2_val_2.fq.gz -S SRR12082753_P.sam
+hisat2 -p 3 --no-mixed --no-discordant --no-unal -x ../indexes/renamed/hg38 -1 ../trimming/SRR12082753_1_val_1.fq.gz -2 ../trimming/SRR12082753_2_val_2.fq.gz -S SRR12082753_c.sam
+hisat2 -p 3 --no-mixed --no-discordant --no-unal -x ../indexes/renamed/hg38 -1 ../trimming/SRR12082754_1_val_1.fq.gz -2 ../trimming/SRR12082754_2_val_2.fq.gz -S SRR12082754_c.sam
+
+#Generar los archivos BAM
+samtools view -bSq 10 SRR12082751_P1.sam | samtools sort --threads 5 -T SRR12082751_P1 -o SRR12082751_P1.bam
+samtools view -bSq 10 SRR12082752_P.sam | samtools sort --threads 5 -T SRR12082752_P -o SRR12082752_P.bam
+samtools view -bSq 10 SRR12082753_c.sam | samtools sort --threads 5 -T SRR12082753_c -o SRR12082753_c.bam
+samtools view -bSq 10 SRR12082754_c.sam | samtools sort --threads 5 -T SRR12082754_c -o SRR12082754_c.bam
+# Indices BAM
+samtools index SRR12082751_P1.bam
+samtools index SRR12082752_P.bam
+samtools index SRR12082753_c.bam
+samtools index SRR12082754_c.bam
