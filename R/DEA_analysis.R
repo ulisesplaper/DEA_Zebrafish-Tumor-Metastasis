@@ -97,3 +97,7 @@ pheatmap(
   show_rownames = FALSE,
     show_colnames = TRUE,legend = T
 )
+dev.copy(pdf, "heatmap_PvsM.pdf")
+dev.off()
+
+
